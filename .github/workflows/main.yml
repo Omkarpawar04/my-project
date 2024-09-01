@@ -2,6 +2,13 @@ name: CI/CD Pipeline
 
 on:
   push:
+  env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: my-ecr-repo
+  ECS_SERVICE: my-ecs-service
+  ECS_CLUSTER: my-ecs-cluster
+  ECS_TASK_DEFINITION: pakage.json
+  CONTAINER_NAME: my-container
     branches:
       - main
 
