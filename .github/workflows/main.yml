@@ -1,66 +1,76 @@
-name: CI/CD Pipeline
+name: Deploy to Amazon ECS
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+
+env:
+  AWS_REGION: us-east-1                   # set this to your preferred AWS region, e.g. us-west-1
+  ECR_REPOSITORY: my-ecr-repo             # set this to your Amazon ECR repository name
+  ECS_SERVICE: my-ecs-service             # set this to your Amazon ECS service name
+  ECS_CLUSTER: my-ecs-cluster             # set this to your Amazon ECS cluster name
+  ECS_TASK_DEFINITION: task-definition.json # set this to the path to your Amazon ECS task definition file
+  CONTAINER_NAME: my-container           # set this to the name of the container in the containerDefinitions section of your task definition
 
 jobs:
-  build-and-deploy:
+  deploy:
+    name: Deploy
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
-    - name: Checkout code
+    - name: Checkout
       uses: actions/checkout@v3
 
-    - name: Set up AWS CLI
+    - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
 
-    - name: Log in to Amazon ECR
+    - name: Login to Amazon ECR
+      id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Build a docker container and
+        # push it to ECR so that it can
+        # be deployed to ECS.
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Fill in the new image ID in the Amazon ECS task definition
+      id: task-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        registry-type: private
+        task-definition: ${{ env.ECS_TASK_DEFINITION }}
+        container-name: ${{ env.CONTAINER_NAME }}
+        image: ${{ steps.build-image.outputs.image }}
 
-    - name: Build Docker image
-      run: |
-        docker build -t my-project:latest .
-
-    - name: Tag Docker image
-      run: |
-        docker tag my-project:latest 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
-
-    - name: Push Docker image to ECR
-      run: |
-        docker push 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
-
-    - name: Deploy to ECS
-      run: |
-        aws ecs update-service \
-          --cluster my-cluster \
-          --service my-service \
-          --force-new-deployment \
-          --image 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
+    - name: Deploy Amazon ECS task definition
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      with:
+        task-definition: ${{ steps.task-def.outputs.task-definition }}
+        service: ${{ env.ECS_SERVICE }}
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
 
     - name: Run integration tests
       run: |
-       # Install dependencies if needed
-       npm install
-       # Run the integration tests
-       npm run test:integration
+        # Add your integration test commands here
+        # For example:
+        # npm run test:integration
 
-    - name: Rollback if necessary
+    - name: Rollback on failure
       if: failure()
       run: |
-        echo "Rolling back to previous version..."
-        # Replace with the previous image tag if known or retrieve it from metadata
-        PREVIOUS_IMAGE_TAG="previous-tag"  # Replace with actual logic to get the previous tag
-        aws ecs update-service \
-          --cluster my-cluster \
-          --service my-service \
-          --force-new-deployment \
-          --image ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:${PREVIOUS_IMAGE_TAG} \
-          --region ${{ secrets.AWS_REGION }}
+        # Rollback to the previous task definition
+        aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --task-definition ${{ env.ECS_TASK_DEFINITION }}
+        echo "Deployment failed. Rolling back to the previous version."
