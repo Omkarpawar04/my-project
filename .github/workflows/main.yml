@@ -2,13 +2,6 @@ name: CI/CD Pipeline
 
 on:
   push:
-  env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: my-ecr-repo
-  ECS_SERVICE: my-ecs-service
-  ECS_CLUSTER: my-ecs-cluster
-  ECS_TASK_DEFINITION: pakage.json
-  CONTAINER_NAME: my-container
     branches:
       - main
 
@@ -16,6 +9,15 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
 
+  env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: my-ecr-repo
+  ECS_SERVICE: my-ecs-service
+  ECS_CLUSTER: my-ecs-cluster
+  ECS_TASK_DEFINITION: task-definition.json
+  CONTAINER_NAME: my-container
+
+  
     steps:
       # Step 1: Checkout code
       - name: Checkout code
