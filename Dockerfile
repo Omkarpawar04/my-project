@@ -1,8 +1,16 @@
-FROM node:16 AS build
-WORKDIR /app
+# Copy package.json and package-lock.json (if available)
 COPY package*.json ./
-RUN npm install
+
+# Install dependencies
+RUN npm ci
+
+# Copy the rest of the application code
 COPY . .
+
+# Set correct permissions
+RUN chmod -R 755 .
+
+# Build the application
 RUN npm run build
 
 # Production stage
