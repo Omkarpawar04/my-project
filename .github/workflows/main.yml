@@ -49,10 +49,3 @@ env:
           cluster: my-ecs-cluster              # Your ECS cluster name
           wait-for-service-stability: true     # Wait until service is stable
           region: ${{ secrets.AWS_REGION }}
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: my-ecr-repo
-  ECS_SERVICE: my-ecs-service
-  ECS_CLUSTER: my-ecs-cluster
-  ECS_TASK_DEFINITION: task-definition.json
-  CONTAINER_NAME: my-container
