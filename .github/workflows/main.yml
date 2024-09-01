@@ -5,47 +5,49 @@ on:
     branches:
       - main
 
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: my-ecr-repo
-  ECS_SERVICE: my-ecs-service
-  ECS_CLUSTER: my-ecs-cluster
-  ECS_TASK_DEFINITION: task-definition.json
-  CONTAINER_NAME: my-container
-
 jobs:
-  build-deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-  
+
     steps:
-      # Step 1: Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v3
-        
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      # Step 2: Log in to Amazon ECR
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
-        with:
-          region: ${{ secrets.AWS_REGION }}
+    - name: Set up AWS CLI
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 3: Build Docker image
-      - name: Build Docker image
-        run: |
-          docker build -t my-project:latest .
-          docker tag my-project:latest ${{ secrets.ECR_REPOSITORY_URI }}:latest
+    - name: Log in to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v1
+      with:
+        registry-type: private
 
-      # Step 4: Push Docker image to ECR
-      - name: Push Docker image to ECR
-        run: |
-          docker push ${{ secrets.ECR_REPOSITORY_URI }}:latest
+    - name: Build Docker image
+      run: |
+        docker build -t my-project:latest .
 
-      # Step 5: Update ECS service with the new image
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ecs-task-def.json  # Your task definition file
-          service: my-ecs-service              # Your ECS service name
-          cluster: my-ecs-cluster              # Your ECS cluster name
-          wait-for-service-stability: true     # Wait until service is stable
-          region: ${{ secrets.AWS_REGION }}
+    - name: Tag Docker image
+      run: |
+        docker tag my-project:latest 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
+
+    - name: Push Docker image to ECR
+      run: |
+        docker push 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
+
+    - name: Deploy to ECS
+      run: |
+        ecs deploy --cluster my-cluster --service my-service --image 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
+
+    - name: Run integration tests
+      run: |
+        # Replace with your integration test commands
+        echo "Running integration tests..."
+
+    - name: Rollback if necessary
+      if: failure()
+      run: |
+        # Replace with rollback commands
+        echo "Rolling back to previous version..."
