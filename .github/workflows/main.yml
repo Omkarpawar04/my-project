@@ -8,19 +8,10 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
-    - name: Set up AWS CLI
-      run: |
-        # Install AWS CLI
-        sudo apt-get update
-        sudo apt-get install -y unzip
-        curl "https://d1uj6qtbmh3dt5.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip awscliv2.zip
-        sudo ./aws/install
 
     - name: Set up AWS CLI
       uses: aws-actions/configure-aws-credentials@v1
@@ -29,15 +20,22 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
+    - name: Log in to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v1
+      with:
+        registry-type: private
+
     - name: Build Docker image
       run: |
         docker build -t my-project:latest .
 
+    - name: Tag Docker image
+      run: |
+        docker tag my-project:latest 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
+
     - name: Push Docker image to ECR
       run: |
-        aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-        docker tag my-project:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
-        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
+        docker push 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
 
     - name: Deploy to ECS
       run: |
@@ -45,11 +43,24 @@ jobs:
           --cluster my-cluster \
           --service my-service \
           --force-new-deployment \
-          --region ${{ secrets.AWS_REGION }}
+          --image 222320796601.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:latest
 
     - name: Run integration tests
       run: |
-        # Add commands to run your integration tests
-        echo "Running integration tests..."
-        # Example test command (replace with actual test command)
-        curl -s -o /dev/null -w "%{http_code}" http://localhost/api/endpoint | grep "200"
+       # Install dependencies if needed
+       npm install
+       # Run the integration tests
+       npm run test:integration
+
+    - name: Rollback if necessary
+      if: failure()
+      run: |
+        echo "Rolling back to previous version..."
+        # Replace with the previous image tag if known or retrieve it from metadata
+        PREVIOUS_IMAGE_TAG="previous-tag"  # Replace with actual logic to get the previous tag
+        aws ecs update-service \
+          --cluster my-cluster \
+          --service my-service \
+          --force-new-deployment \
+          --image ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-project:${PREVIOUS_IMAGE_TAG} \
+          --region ${{ secrets.AWS_REGION }}
