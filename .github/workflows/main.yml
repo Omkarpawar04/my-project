@@ -3,25 +3,24 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - main  # Trigger the workflow on pushes to the main branch
+      - main
 
 jobs:
-  build-and-deploy:
+  build-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code from GitHub repository
+      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v3
 
       # Step 2: Log in to Amazon ECR
       - name: Log in to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
         with:
           region: ${{ secrets.AWS_REGION }}
 
-      # Step 3: Build the Docker image
+      # Step 3: Build Docker image
       - name: Build Docker image
         run: |
           docker build -t my-project:latest .
@@ -31,3 +30,13 @@ jobs:
       - name: Push Docker image to ECR
         run: |
           docker push ${{ secrets.ECR_REPOSITORY_URI }}:latest
+
+      # Step 5: Update ECS service with the new image
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ecs-task-def.json  # Your task definition file
+          service: my-ecs-service              # Your ECS service name
+          cluster: my-ecs-cluster              # Your ECS cluster name
+          wait-for-service-stability: true     # Wait until service is stable
+          region: ${{ secrets.AWS_REGION }}
